@@ -9,6 +9,14 @@ Lever is a simple express.js like http server that allow quick routing of paths 
 local lever = require('lever')
 
 
+-- log every request that goes through lever
+function logger(req,res,pass)
+	p("new request ",req.url)
+	pass()
+end
+
+lever:add_middleware(logger)
+
 -- all means map to any method
 lever.all('/ping',function(req,res)
 	res:writeHead(200,{})
