@@ -1,6 +1,7 @@
 #Lever
 
 Lever is a simple express.js like http server that allow quick routing of paths to functions that act as handlers.
+Consider this as unstable and very subject to change.
 
 ##Example Usage
 
