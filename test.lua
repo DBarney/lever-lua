@@ -22,7 +22,7 @@ function Echo:initialize(options)
     Lever.Stream.Transform.initialize(self, opt)
 end
 function Echo:_transform(opts,encoding,cb)
-    opts.data = {ping = "pong",global = self.options}
+    opts.data = {ping = "pong",global = self.options,env = opts.req.env}
     cb(nil, opts)
 end
 
@@ -48,4 +48,9 @@ local stats = Stats:new(12)
 stats:pipe(lever.json()):pipe(lever:get('/stats'))
 
 -- this seems to work better for what we need in this case
-lever:get('/ping'):pipe(echo):pipe(lever.json()):pipe(lever.reply())
+echo:pipe(lever.json()):pipe(lever.reply())
+
+lever:all('/ping'):pipe(echo)
+lever:all('/ping/?test'):pipe(echo)
+
+process:on('error',p)

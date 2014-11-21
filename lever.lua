@@ -83,7 +83,6 @@ function Resource:initialize(lever)
         if self.writable then
             self.readable = false
         else
-            p(from,self)
             error(core.Error:new('writting to a non writable stream'))
         end
     end)
@@ -131,11 +130,12 @@ end
 local Lever = core.Object:extend()
 
 function Lever:initialize(ip,port)
-    self.resources = {}
+    self.resources = {map = {}}
     self.server = http.createServer(function (req, res)
         -- lookup what stream to read from, then read from it
-        local resource = self:lookup(req.url)
+        local resource,env = self:lookup(req.url,req.method:upper())
         if resource then
+            req.env = env
             resource:handle(req,res)
         else
             res:writeHead(404, {})
@@ -145,15 +145,107 @@ function Lever:initialize(ip,port)
     self.server:listen(ip,port)
 end
 
-function Lever:lookup(path)
-    return self.resources[path]
+local build_lookup = function(path,method)
+    local chunks = {}
+
+    for chunk in path:gmatch("[^/]*") do
+        if chunk:len() > 0 then
+            chunks[#chunks + 1] = chunk
+        end
+    end
+
+    chunks[#chunks + 1] = method
+    return chunks
 end
 
+function Lever:lookup(path,method)
+    if type(path) == "string" then
+        path = build_lookup(path,method)
+    end
+    return self:_lookup(path,false)
+end
+
+function Lever:_lookup(chunks,exact)
+    local match = self.resources
+    local glob = {}
+    for _idx,key in pairs(chunks) do
+        local new_match = match.map[key]
+        if not new_match then
+            new_match = match.map['?']
+            if not new_match then
+                match = nil
+                break
+            end
+            glob[#glob + 1] = key
+        end
+        match = new_match
+    end
+    if match then
+        local map = {}
+        if match.glob[#match.glob] == '__method' then
+            match.glob[#match.glob] = nil
+        end
+        for idx,key in pairs(match.glob) do
+            map[key] = glob[idx]
+        end
+        return match.resource,map
+    end
+end
+
+function Lever:_insert(chunks,resource)
+    local match = self.resources
+    local glob = {}
+    for _idx,key in pairs(chunks) do
+        if key:sub(1,1) == '?' then
+            glob[#glob + 1] = key:sub(2,key:len())
+            key = '?'
+        end
+
+        new_match = match.map[key]
+        if not new_match then
+            new_match = {map = {},glob = {}}
+            match.map[key] = new_match
+        end
+        match = new_match
+    end
+
+    match.resource = resource
+    match.glob = glob
+end
 
 function Lever:get(path)
-    local resource = Resource:new(self)
-    -- store off the resource somewhere
-    self.resources[path] = resource
+    return self:facade(path,'GET')
+end
+
+function Lever:post(path)
+    return self:facade(path,'POST')
+end
+
+function Lever:put(path)
+    return self:facade(path,'PUT')
+end
+
+function Lever:head(path)
+    return self:facade(path,'HEAD')
+end
+
+function Lever:delete(path)
+    return self:facade(path,'DELETE')
+end
+
+function Lever:all(path)
+    return self:facade(path,'?__method')
+end
+
+function Lever:facade(path,method)
+    local chunks = build_lookup(path,method)
+
+    local resource = self:lookup(chunks,true)
+    if not resource then
+        resource = Resource:new(self)
+        -- store off the resource somewhere
+        self:_insert(chunks,resource)
+    end
     return resource
 end
 
