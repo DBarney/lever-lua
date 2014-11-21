@@ -9,189 +9,156 @@
 -- Created :   3 Sept 2014 by Daniel Barney <daniel@pagodabox.com>
 ---------------------------------------------------------------------
 
+local Stream = require('stream')
 local http = require('http')
-local querystring = require('querystring')
-local table = require('table')
+local json = require('json')
+-- local querystring = require('querystring')
+-- local table = require('table')
+local core = require('core')
 
-local Lever = {}
-Lever.__index = Lever
+local Endpoint = Stream.Writable:extend()
 
-function Lever.new ()
-    local self = 
-        {cbs = {}
-        ,middleware = {}}
-    self = setmetatable(self, Lever)
-    return self
+function Endpoint:initialize()
+    local opt = {objectMode = true}
+    Stream.Writable.initialize(self, opt)
 end
 
-function Lever:add_middleware(middleware)
-    self.middleware[#self.middleware +1] = middleware
-end
-
-function Lever:get(path,...)
-    self:add_route('/GET',path,...)
-end
-
-function Lever:put(path,...)
-    self:add_route('/PUT',path,...)
-end
-
-function Lever:post(path,...)
-    self:add_route('/POST',path,...)
-end
-
-function Lever:delete(path,...)
-    self:add_route('/DELETE',path,...)
-end
-
-function Lever:all(path,...)
-    self:add_route('?',path,...)
-end
-
-function Lever:add_route(method,path,...)
-    local stack = {...}
-    local cbs = self.cbs
-    local fields = {}
-    local matches = {}
-    path = path:lower()
-    for c in path:gmatch("/[^/]*") do
-        -- print("test:",c,c:sub(2,2))
-        if c:sub(2,2) == "?" then
-            -- print("matching",path,c)
-            
-            matches[#matches + 1] = c:sub(3,c:len())
-
-            fields[#fields + 1] = "?"
-        else
-            -- print("inserting",path,c)
-            fields[#fields + 1] = c 
-        end
-    end
-
-    local node = cbs
-    local elem
-    for index,elem in ipairs(fields) do
-        -- print("path",path,elem)
-        local tmp = node[elem]
-        if not tmp then
-            tmp = {}
-            node[elem] = tmp
-        end
-        node = tmp
-    end
-    if not node[method] then
-        node[method] = {}
-        node = node[method]
-    end
-    if method == '?' then
-        matches[#matches + 1] = "priv__method"
-    end
-    node.stack = stack
-    node.matches = matches
-
-
-end
-
-
--- private function
-function find_route(lever,method,url)
-    -- print("method",method)
-    local fields = {}
-    for c in url:gmatch("/[^/]*") do
-    fields[#fields + 1] = c
-  end
-  fields[#fields + 1] = "/" .. method
-
-  local node = lever.cbs
-  local elem
-  local matches = {}
-
-    for index,elem in ipairs(fields) do
-        -- print("checking",elem)
-        local tmp = node[elem]
-        if (not tmp) and node["?"] then
-            matches[#matches + 1] = elem:sub(2,elem:len())
-            -- print("match?",elem,matches[#matches])
-            tmp = node["?"]
-        end
-        if not tmp then
-            return nil
-        end
-        node = tmp
-    end
-
-    if #node.matches == #matches then
-        -- print("matched!",#matches)
-        local env = {}
-        for index in ipairs(matches) do
-            -- print ("adding",node.matches[index],index,matches[index])
-            env[node.matches[index]] = matches[index]
-        end
-        return node.stack, env
+function Endpoint:_write(data,encoding,cb)
+    if data.res then
+        data.res:writeHead(data.code or 200,data.headers or {})
+        data.res:finish(data.data)
+        cb()
     else
-        -- print("didn't match...")
-        return nil
+        cb(core.Error:new('stream doesn\'t have the response' ))
     end
-
 end
 
-function handle_stack (stack,req,res)
-  local step = stack[1]
-  if step then
-    table.remove(stack,1)
-    step(req,res,function()
-        handle_stack(stack,req,res)
-    end)
-  end
+local Json = Stream.Transform:extend()
+
+function Json:initialize()
+    local opt = {objectMode = true}
+    Stream.Transform.initialize(self, opt)
 end
 
-function concat(t1,t2)
-    for i=1,#t2 do
-        t1[#t1+1] = t2[i]
+function Json:_transform(data,encoding,cb)
+    -- this will cause issues eventually...
+    local encoded = data
+    if type(data) == "table" and data.data then
+        data.data = json.stringify(data.data or data)
+    else
+        encoded = json.stringify(data)
     end
-    return t1
+    cb(nil,encoded)
 end
 
-function Lever:listen(port,ip)
-    if not ip then
-        ip = "127.0.0.1"
-    end
-    local lever = self
-    self.server = http.createServer(function (req, res)
-      
-      res:on("error", function(err)
-        msg = tostring(err)
-        -- print("Error while sending a response: " .. msg)
-      end)
 
-      local path,qs = req.url:match("([^?]+)(|?(.*))")
-      local route_stack, env = find_route(lever,req.method,path)
-      
-      local stack = concat({},self.middleware);
-      
-      if route_stack then
-        if qs then
-            req.qs = querystring.parse(qs:sub(2,qs:len()))
+local Resource = Stream.Duplex:extend()
+
+function Resource:initialize(lever)
+    local opt = 
+        {objectMode = true}
+    self.lever = lever
+
+    Stream.Duplex.initialize(self, opt)
+    self.readable = true
+    self.writable = true
+
+    
+    -- if this stream has pipe called on it, then it will be
+    -- sending requests down the pipe to be handled
+    local prev_pipe = self.pipe
+    self.pipe = function(...)
+        if self.readable then
+            self.writable = false
+            self.need_read = false
+            self.queue = {}
+            return prev_pipe(...)
+                
         else
-            req.qs = {}
+            error(core.Error:new('reading from a non readable stream'))
         end
-            
-        req.env = env
-        req.user = {}
+    end
 
-        stack = concat(stack,route_stack);
-      else
-        stack[#stack +1] = function(req,res,pass)
-            res:writeHead(404,{})
-            res:finish()
-          end
-      end
-      
-      handle_stack(stack,req,res)
-
+    self:on('pipe',function(from)
+        if self.writable then
+            self.readable = false
+        else
+            p(from,self)
+            error(core.Error:new('writting to a non writable stream'))
+        end
     end)
-    print("Server listening at http://"..ip..":"..port.."/")
-    self.server:listen(port,ip)
 end
 
+function Resource:_write(chunk, encoding, cb)
+    self:emit('publish',chunk)
+    cb()
+end
+
+local next_alive_req = function(queue)
+    return table.remove(queue,1)
+end
+function Resource:_read(_n)
+    local elem = next_alive_req(self.queue)
+
+    if elem then
+        self:push(elem)
+    else
+        self.need_read = true
+    end
+end
+
+function Resource:handle(req,res)
+    if self.writable then
+        -- this is the resource for streaming data out from
+        -- the system
+        res:writeHead(200,{["Transfer-Encoding"] = "chunked"})
+        res.chunkedEncoding = true
+        self:on('publish',function(data)
+            res:write(data)
+        end)
+    elseif self.readable then
+        -- this is the start for requests made to the system
+        local elem = {req = req,res = res}
+        if self.need_read then
+            self.need_read = false
+            self:push(elem)
+        else
+            self.queue[#self.queue + 1] = elem
+        end
+    end
+end
+
+local Lever = core.Object:extend()
+
+function Lever:initialize(ip,port)
+    self.resources = {}
+    self.server = http.createServer(function (req, res)
+        -- lookup what stream to read from, then read from it
+        local resource = self:lookup(req.url)
+        if resource then
+            resource:handle(req,res)
+        else
+            res:writeHead(404, {})
+            res:finish("")
+        end
+    end)
+    self.server:listen(ip,port)
+end
+
+function Lever:lookup(path)
+    return self.resources[path]
+end
+
+
+function Lever:get(path)
+    local resource = Resource:new(self)
+    -- store off the resource somewhere
+    self.resources[path] = resource
+    return resource
+end
+
+function Lever:json() return Json:new() end
+function Lever:reply() return Endpoint:new() end
+
+Lever.Stream = Stream
 return Lever
