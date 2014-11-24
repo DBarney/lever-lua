@@ -18,7 +18,7 @@ Lever gives developers a very good place to stand. It is built on [luvit](https:
 Lever should be considered a work in progress, as the api has and will go through considerable changes as luvit evolves and matures, and as new ideas are incorporated into the project.
 
 
-Right now there are three types of systems available to the developer.
+Right now there are four types of systems available to the developer.
 - standard req,res callbacks
 - stream based req,res functions
 - stream based handoff functions
