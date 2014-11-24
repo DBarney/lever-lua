@@ -124,7 +124,7 @@ lever:get('/file/?name')
 
 ##Stream based event systems
 
-Piping to a lever endpoint creates a subscription type system. This is makes it really easy to generate pub sub style systems where events have no guarantee to be delivered.
+Piping to a lever endpoint creates a subscription type system. This is makes it really easy to generate pub sub style systems where events are not stored and are instantly send to eveyone interested.
 
 ###Example
 
