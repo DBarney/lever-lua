@@ -14,12 +14,12 @@ Lever = require('./lever')
 
 local lever = Lever:new(8080,"127.0.0.1")
 
-local Publish = Lever.Stream.Readable:extend()
+local Readable = Lever.Stream.Readable
+local Publish = Readable:extend()
 
-function Publish:initialize(init)
-    self.value = init or 0
+function Publish:initialize()
     local opt = {objectMode = true}
-    Lever.Stream.Readable.initialize(self, opt)
+    Readable.initialize(self,opt)
 end
 
 function Publish:_read(opts)

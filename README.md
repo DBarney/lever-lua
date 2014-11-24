@@ -47,15 +47,16 @@ This is the Standard version wrapped up in a streams api.
 
 ```lua
 local lever = require('lever')
+local Transform = lever.Streams.Transform
 
 
 -- kind of messy right now, but working to clean it up
-local Echo = Lever.Stream.Transform:extend()
+local Echo = Transform:extend()
 
 function Echo:initialize(data)
     self.data = data
     local opt = {objectMode = true}
-    Lever.Stream.Transform.initialize(self, opt)
+    Transform.initialize(self, opt)
 end
 
 function Echo:_transform(opts,encoding,cb)
@@ -91,15 +92,16 @@ Sometimes, you need more then just a single response. With this version you pass
 
 ```lua
 local lever = require('lever')
+local Transform = lever.Streams.Transform
 
 
 -- kind of messy right now, but working to clean it up
-local Static = Lever.Stream.Transform:extend()
+local Static = Transform:extend()
 
 function Static:initialize(folder)
     self.folder = folder
     local opt = {objectMode = true}
-    Lever.Stream.Transform.initialize(self, opt)
+    Transform.initialize(self, opt)
 end
 
 function Static:_transform(opts,encoding,cb)
@@ -130,14 +132,15 @@ Piping to a lever endpoint creates a subscription type system. This is makes it 
 
 ```lua
 local lever = require('lever')
+local Readable = lever.Streams.Readable
 
 
 -- kind of messy right now, but working to clean it up
-local Publish = Lever.Stream.Readable:extend()
+local Publish = Readable:extend()
 
 function Publish:initialize()
     local opt = {objectMode = true}
-    Lever.Stream.Readable.initialize(self, opt)
+    Readable.initialize(self, opt)
 end
 
 function Publish:_read(opts)
