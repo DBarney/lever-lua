@@ -32,12 +32,14 @@ function Stats:initialize(init)
     self.value = init or 0
     local opt = {objectMode = true}
     Lever.Stream.Readable.initialize(self, opt)
-end
-function Stats:_read(opts)
-    timer.setTimeout(1000,function() 
+    timer.setInterval(1000,function() 
         self:push(self.value)
         self.value = self.value + 1
     end)
+end
+
+function Stats:_read(opts)
+    p('waiting')
 end
 
 local Static = Lever.Stream.Transform:extend()
