@@ -12,6 +12,7 @@
 
 Lever = require('./lever')
 timer = require('timer')
+fs = require('fs')
 
 local lever = Lever:new(8080,"127.0.0.1")
 
@@ -39,8 +40,28 @@ function Stats:_read(opts)
     end)
 end
 
+local Static = Lever.Stream.Transform:extend()
+function Static:initialize(folder)
+    self.folder = folder
+    local opt = {objectMode = true}
+    Lever.Stream.Transform.initialize(self, opt)
+end
+function Static:_transform(opts,encoding,cb)
+    local file = self.folder .. '/' .. opts.req.env.name
+    fs.stat(file,function(err,_)
+        if not err then
+            opts.stream = fs.createReadStream(file)
+            cb(nil,opts)
+        else
+            opts.code = 404
+            cb(nil,opts)
+        end
+    end)
+end
+
 local echo = Echo:new("default")
 local stats = Stats:new(12)
+local static = Static:new(process.env.PWD)
 
 
 -- not sure how useful this function really is, it could be good for a stream
@@ -52,5 +73,7 @@ echo:pipe(lever.json()):pipe(lever.reply())
 
 lever:all('/ping'):pipe(echo)
 lever:all('/ping/?test'):pipe(echo)
+
+lever:get('/file/?name'):pipe(static):pipe(lever.reply())
 
 process:on('error',p)
