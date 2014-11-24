@@ -60,21 +60,35 @@ function Static:_transform(opts,encoding,cb)
     end)
 end
 
+
+
+
+
+-- old express.js style api
+lever:all('/test',function(req,res)
+    res:finish('response')
+end)
+
+-- stream of events that clients can subscribe to, no history
+Stats:new(12)
+    :pipe(lever.json())
+    :pipe(lever:get('/stats'))
+
+
+-- echo endpoint that responds with data stored in the url.
 local echo = Echo:new("default")
-local stats = Stats:new(12)
-local static = Static:new(process.env.PWD)
+    :pipe(lever.json())
+    :pipe(lever.reply())
+
+lever:all('/ping')
+    :pipe(echo)
+lever:all('/ping/?test')
+    :pipe(echo)
 
 
--- not sure how useful this function really is, it could be good for a stream
--- of events that the user subscribes to
-stats:pipe(lever.json()):pipe(lever:get('/stats'))
-
--- this seems to work better for what we need in this case
-echo:pipe(lever.json()):pipe(lever.reply())
-
-lever:all('/ping'):pipe(echo)
-lever:all('/ping/?test'):pipe(echo)
-
-lever:get('/file/?name'):pipe(static):pipe(lever.reply())
+-- static file streamer, no cache, always reads from disk.
+lever:get('/file/?name')
+    :pipe(Static:new(process.env.PWD))
+    :pipe(lever.reply())
 
 process:on('error',p)

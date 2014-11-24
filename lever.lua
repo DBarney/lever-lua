@@ -103,36 +103,42 @@ function Lever:_insert(chunks,resource)
     match.glob = glob
 end
 
-function Lever:get(path)
-    return self:facade(path,'GET')
+function Lever:get(path,cb)
+    return self:facade(path,'GET',cb)
 end
 
-function Lever:post(path)
-    return self:facade(path,'POST')
+function Lever:post(path,cb)
+    return self:facade(path,'POST',cb)
 end
 
-function Lever:put(path)
-    return self:facade(path,'PUT')
+function Lever:put(path,cb)
+    return self:facade(path,'PUT',cb)
 end
 
-function Lever:head(path)
-    return self:facade(path,'HEAD')
+function Lever:head(path,cb)
+    return self:facade(path,'HEAD',cb)
 end
 
-function Lever:delete(path)
-    return self:facade(path,'DELETE')
+function Lever:delete(path,cb)
+    return self:facade(path,'DELETE',cb)
 end
 
-function Lever:all(path)
-    return self:facade(path,'?__method')
+function Lever:all(path,cb)
+    return self:facade(path,'?__method',cb)
 end
 
-function Lever:facade(path,method)
+function Lever:facade(path,method,cb)
     local chunks = build_lookup(path,method)
 
     local resource = self:lookup(chunks,true)
     if not resource then
-        resource = Resource:new(self)
+        if not (cb == nil) then
+
+            resource = {handle = function(_,...) cb(...) end}
+        else
+            resource = Resource:new(self)
+        end
+        resource.path = path
         -- store off the resource somewhere
         self:_insert(chunks,resource)
     end
