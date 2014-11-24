@@ -48,6 +48,7 @@ function Static:initialize(folder)
 end
 function Static:_transform(opts,encoding,cb)
     local file = self.folder .. '/' .. opts.req.env.name
+    -- yeah not safe at all.
     fs.stat(file,function(err,_)
         if not err then
             opts.stream = fs.createReadStream(file)
