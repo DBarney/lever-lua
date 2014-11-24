@@ -149,7 +149,8 @@ end
 local publish = Publish:new(12)
 lever:post('pub/?msg',function(req,res)
 	publish:push(req.env.msg)
-	res.finish()
+	res:writeHead(200,{})
+    res:finish("")
 end)
 
 publish

@@ -11,86 +11,29 @@
 ---------------------------------------------------------------------
 
 Lever = require('./lever')
-timer = require('timer')
-fs = require('fs')
 
 local lever = Lever:new(8080,"127.0.0.1")
 
-local Echo = Lever.Stream.Transform:extend()
-function Echo:initialize(options)
-    self.options = options
-    local opt = {objectMode = true}
-    Lever.Stream.Transform.initialize(self, opt)
-end
-function Echo:_transform(opts,encoding,cb)
-    opts.data = {ping = "pong",global = self.options,env = opts.req.env}
-    cb(nil, opts)
-end
+local Publish = Lever.Stream.Readable:extend()
 
-local Stats = Lever.Stream.Readable:extend()
-function Stats:initialize(init)
+function Publish:initialize(init)
     self.value = init or 0
     local opt = {objectMode = true}
     Lever.Stream.Readable.initialize(self, opt)
-    timer.setInterval(1000,function() 
-        self:push(self.value)
-        self.value = self.value + 1
-    end)
 end
 
-function Stats:_read(opts)
-    p('waiting')
-end
-
-local Static = Lever.Stream.Transform:extend()
-function Static:initialize(folder)
-    self.folder = folder
-    local opt = {objectMode = true}
-    Lever.Stream.Transform.initialize(self, opt)
-end
-function Static:_transform(opts,encoding,cb)
-    local file = self.folder .. '/' .. opts.req.env.name
-    -- yeah not safe at all.
-    fs.stat(file,function(err,_)
-        if not err then
-            opts.stream = fs.createReadStream(file)
-            cb(nil,opts)
-        else
-            opts.code = 404
-            cb(nil,opts)
-        end
-    end)
+function Publish:_read(opts)
+    -- don't need anything here, all data comes from some where else
 end
 
 
-
-
-
--- old express.js style api
-lever:all('/test',function(req,res)
-    res:finish('response')
+local publish = Publish:new(12)
+lever:post('pub/?msg',function(req,res)
+    publish:push(req.env.msg)
+    res:writeHead(200,{})
+    res:finish("")
 end)
 
--- stream of events that clients can subscribe to, no history
-Stats:new(12)
+publish
     :pipe(lever.json())
-    :pipe(lever:get('/stats'))
-
-
--- echo endpoint that responds with data stored in the url.
-local echo = Echo:new("default")
-    :pipe(lever.json())
-    :pipe(lever.reply())
-
-lever:all('/ping')
-    :pipe(echo)
-lever:all('/ping/?test')
-    :pipe(echo)
-
-
--- static file streamer, no cache, always reads from disk.
-lever:get('/file/?name')
-    :pipe(Static:new(process.env.PWD))
-    :pipe(lever.reply())
-
-process:on('error',p)
+    :pipe(lever:get('/sub'))
