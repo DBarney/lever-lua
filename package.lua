@@ -1,5 +1,5 @@
 return
-	{description = "A simple express.js like http router with middleware"
-	,version = "0.1.1"
+	{description = "A simple streams based http api"
+	,version = "0.2.0"
 	,main = "lever.lua"
 }

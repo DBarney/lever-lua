@@ -10,188 +10,144 @@
 ---------------------------------------------------------------------
 
 local http = require('http')
-local querystring = require('querystring')
-local table = require('table')
-
-local Lever = {}
-Lever.__index = Lever
-
-function Lever.new ()
-    local self = 
-        {cbs = {}
-        ,middleware = {}}
-    self = setmetatable(self, Lever)
-    return self
-end
-
-function Lever:add_middleware(middleware)
-    self.middleware[#self.middleware +1] = middleware
-end
-
-function Lever:get(path,...)
-    self:add_route('/GET',path,...)
-end
-
-function Lever:put(path,...)
-    self:add_route('/PUT',path,...)
-end
-
-function Lever:post(path,...)
-    self:add_route('/POST',path,...)
-end
-
-function Lever:delete(path,...)
-    self:add_route('/DELETE',path,...)
-end
-
-function Lever:all(path,...)
-    self:add_route('?',path,...)
-end
-
-function Lever:add_route(method,path,...)
-    local stack = {...}
-    local cbs = self.cbs
-    local fields = {}
-    local matches = {}
-    path = path:lower()
-    for c in path:gmatch("/[^/]*") do
-        -- print("test:",c,c:sub(2,2))
-        if c:sub(2,2) == "?" then
-            -- print("matching",path,c)
-            
-            matches[#matches + 1] = c:sub(3,c:len())
-
-            fields[#fields + 1] = "?"
-        else
-            -- print("inserting",path,c)
-            fields[#fields + 1] = c 
-        end
-    end
-
-    local node = cbs
-    local elem
-    for index,elem in ipairs(fields) do
-        -- print("path",path,elem)
-        local tmp = node[elem]
-        if not tmp then
-            tmp = {}
-            node[elem] = tmp
-        end
-        node = tmp
-    end
-    if not node[method] then
-        node[method] = {}
-        node = node[method]
-    end
-    if method == '?' then
-        matches[#matches + 1] = "priv__method"
-    end
-    node.stack = stack
-    node.matches = matches
+local core = require('core')
+local Stream = require('stream')
+local Json = require('./lib/json')
+local Resource = require('./lib/resource')
+local Reply = require('./lib/reply')
 
 
-end
+local Lever = core.Object:extend()
 
-
--- private function
-function find_route(lever,method,url)
-    -- print("method",method)
-    local fields = {}
-    for c in url:gmatch("/[^/]*") do
-    fields[#fields + 1] = c
-  end
-  fields[#fields + 1] = "/" .. method
-
-  local node = lever.cbs
-  local elem
-  local matches = {}
-
-    for index,elem in ipairs(fields) do
-        -- print("checking",elem)
-        local tmp = node[elem]
-        if (not tmp) and node["?"] then
-            matches[#matches + 1] = elem:sub(2,elem:len())
-            -- print("match?",elem,matches[#matches])
-            tmp = node["?"]
-        end
-        if not tmp then
-            return nil
-        end
-        node = tmp
-    end
-
-    if #node.matches == #matches then
-        -- print("matched!",#matches)
-        local env = {}
-        for index in ipairs(matches) do
-            -- print ("adding",node.matches[index],index,matches[index])
-            env[node.matches[index]] = matches[index]
-        end
-        return node.stack, env
-    else
-        -- print("didn't match...")
-        return nil
-    end
-
-end
-
-function handle_stack (stack,req,res)
-  local step = stack[1]
-  if step then
-    table.remove(stack,1)
-    step(req,res,function()
-        handle_stack(stack,req,res)
-    end)
-  end
-end
-
-function concat(t1,t2)
-    for i=1,#t2 do
-        t1[#t1+1] = t2[i]
-    end
-    return t1
-end
-
-function Lever:listen(port,ip)
-    if not ip then
-        ip = "127.0.0.1"
-    end
-    local lever = self
+function Lever:initialize(ip,port)
+    self.resources = {map = {}}
     self.server = http.createServer(function (req, res)
-      
-      res:on("error", function(err)
-        msg = tostring(err)
-        -- print("Error while sending a response: " .. msg)
-      end)
-
-      local path,qs = req.url:match("([^?]+)(|?(.*))")
-      local route_stack, env = find_route(lever,req.method,path)
-      
-      local stack = concat({},self.middleware);
-      
-      if route_stack then
-        if qs then
-            req.qs = querystring.parse(qs:sub(2,qs:len()))
+        -- lookup what stream to read from, then read from it
+        local resource,env = self:lookup(req.url,req.method:upper())
+        if resource then
+            req.env = env
+            resource:handle(req,res)
         else
-            req.qs = {}
+            res:writeHead(404, {})
+            res:finish("")
         end
-            
-        req.env = env
-        req.user = {}
-
-        stack = concat(stack,route_stack);
-      else
-        stack[#stack +1] = function(req,res,pass)
-            res:writeHead(404,{})
-            res:finish()
-          end
-      end
-      
-      handle_stack(stack,req,res)
-
     end)
-    print("Server listening at http://"..ip..":"..port.."/")
-    self.server:listen(port,ip)
+    self.server:listen(ip,port)
 end
 
+local build_lookup = function(path,method)
+    local chunks = {}
+
+    for chunk in path:gmatch("[^/]*") do
+        if chunk:len() > 0 then
+            chunks[#chunks + 1] = chunk
+        end
+    end
+
+    chunks[#chunks + 1] = method
+    return chunks
+end
+
+function Lever:lookup(path,method)
+    if type(path) == "string" then
+        path = build_lookup(path,method)
+    end
+    return self:_lookup(path,false)
+end
+
+function Lever:_lookup(chunks,exact)
+    local match = self.resources
+    local glob = {}
+    for _idx,key in pairs(chunks) do
+        local new_match = match.map[key]
+        if not new_match then
+            new_match = match.map['?']
+            if not new_match then
+                match = nil
+                break
+            end
+            glob[#glob + 1] = key
+        end
+        match = new_match
+    end
+    if match then
+        local map = {}
+        if match.glob[#match.glob] == '__method' then
+            match.glob[#match.glob] = nil
+        end
+        for idx,key in pairs(match.glob) do
+            map[key] = glob[idx]
+        end
+        return match.resource,map
+    end
+end
+
+function Lever:_insert(chunks,resource)
+    local match = self.resources
+    local glob = {}
+    for _idx,key in pairs(chunks) do
+        if key:sub(1,1) == '?' then
+            glob[#glob + 1] = key:sub(2,key:len())
+            key = '?'
+        end
+
+        new_match = match.map[key]
+        if not new_match then
+            new_match = {map = {},glob = {}}
+            match.map[key] = new_match
+        end
+        match = new_match
+    end
+
+    match.resource = resource
+    match.glob = glob
+end
+
+function Lever:get(path,cb)
+    return self:facade(path,'GET',cb)
+end
+
+function Lever:post(path,cb)
+    return self:facade(path,'POST',cb)
+end
+
+function Lever:put(path,cb)
+    return self:facade(path,'PUT',cb)
+end
+
+function Lever:head(path,cb)
+    return self:facade(path,'HEAD',cb)
+end
+
+function Lever:delete(path,cb)
+    return self:facade(path,'DELETE',cb)
+end
+
+function Lever:all(path,cb)
+    return self:facade(path,'?__method',cb)
+end
+
+function Lever:facade(path,method,cb)
+    local chunks = build_lookup(path,method)
+
+    local resource = self:lookup(chunks,true)
+    if not resource then
+        if not (cb == nil) then
+
+            resource = {handle = function(_,...) cb(...) end}
+        else
+            resource = Resource:new(self)
+        end
+        resource.path = path
+        -- store off the resource somewhere
+        self:_insert(chunks,resource)
+    end
+    return resource
+end
+
+
+function Lever:json() return Json:new() end
+function Lever:reply() return Reply:new() end
+
+Lever.Stream = Stream
 return Lever
