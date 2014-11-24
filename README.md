@@ -135,8 +135,7 @@ local lever = require('lever')
 -- kind of messy right now, but working to clean it up
 local Publish = Lever.Stream.Readable:extend()
 
-function Publish:initialize(init)
-    self.value = init or 0
+function Publish:initialize()
     local opt = {objectMode = true}
     Lever.Stream.Readable.initialize(self, opt)
 end
@@ -146,7 +145,7 @@ function Publish:_read(opts)
 end
 
 
-local publish = Publish:new(12)
+local publish = Publish:new()
 lever:post('pub/?msg',function(req,res)
 	publish:push(req.env.msg)
 	res:writeHead(200,{})
