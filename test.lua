@@ -10,11 +10,12 @@
 -- Created :   3 Sept 2014 by Daniel Barney <daniel@pagodabox.com>
 ---------------------------------------------------------------------
 
+
 Lever = require('./lever')
 
 local lever = Lever:new(8080,"127.0.0.1")
-
 local Readable = Lever.Stream.Readable
+
 local Publish = Readable:extend()
 
 function Publish:initialize()
@@ -28,12 +29,16 @@ end
 
 
 local publish = Publish:new(12)
-lever:post('pub/?msg',function(req,res)
-    publish:push(req.env.msg)
+lever:post('pub/?type/?msg',function(req,res)
+	
+	local obj = {data = req.env.msg}
+	obj.event = {type = req.env.type}
+
+    publish:push(obj)
     res:writeHead(200,{})
     res:finish("")
 end)
 
 publish
     :pipe(lever.json())
-    :pipe(lever:get('/sub'))
+    :pipe(lever:get('/sub/?type'))

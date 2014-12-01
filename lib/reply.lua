@@ -34,8 +34,8 @@ end
 
 function Reply:_write(data,encoding,cb)
     if data.res then
-        data.res:writeHead(data.code or 200,data.headers or {})
         if data.stream then
+            data.res:writeHead(data.code or 200,data.headers or {})
             local res = Streamed:new(data.res)
             data.stream:pipe(res)
             data.stream:once('end',function()
@@ -45,6 +45,13 @@ function Reply:_write(data,encoding,cb)
                 data.res:finish()
             end)
         else
+            
+            if not data.headers then
+                data.headers = {}
+            end
+            data.headers["Content-Length"] = #data.data
+
+            data.res:writeHead(data.code or 200,data.headers)
             data.res:finish(data.data)
         end
         cb()

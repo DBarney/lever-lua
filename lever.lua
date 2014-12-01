@@ -15,6 +15,7 @@ local Stream = require('stream')
 local Json = require('./lib/json')
 local Resource = require('./lib/resource')
 local Reply = require('./lib/reply')
+local Body = require('./lib/body')
 
 
 local Lever = core.Object:extend()
@@ -148,6 +149,7 @@ end
 
 function Lever:json() return Json:new() end
 function Lever:reply() return Reply:new() end
+function Lever:body() return Body:new() end
 
 Lever.Stream = Stream
 return Lever

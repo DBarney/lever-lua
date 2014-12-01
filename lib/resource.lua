@@ -72,7 +72,23 @@ function Resource:handle(req,res)
         res:writeHead(200,{["Transfer-Encoding"] = "chunked"})
         res.chunkedEncoding = true
         self:on('publish',function(data)
-            res:write(data)
+            if type(data) == "table" then
+                if type(data.data) == "string" then
+                    if type(data.event) == "table" then
+                        for idx,event in pairs(data.event) do
+                            if req.env[idx] == event then
+                                res:write(data.data)
+                            end    
+                        end
+                    else
+                        if data.event and req.env[data.event] then
+                            res:write(data.data)
+                        end
+                    end
+                end
+            else
+                res:write(data)
+            end
         end)
     elseif self.readable then
         -- this is the start for requests made to the system
