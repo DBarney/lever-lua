@@ -1,3 +1,0 @@
-[submodule "modules/stream"]
-	path = modules/stream
-	url = https://github.com/virgo-agent-toolkit/luvit-stream.git

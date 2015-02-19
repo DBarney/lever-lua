@@ -37,3 +37,9 @@ end)
 publish
     :pipe(lever.json())
     :pipe(lever:get('/sub'))
+
+
+lever:all('ping',function(req,res)
+	res:writeHead(200,{})
+	res:finish("pong")
+end)
