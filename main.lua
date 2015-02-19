@@ -9,9 +9,9 @@
 -- Created :   3 Sept 2014 by Daniel Barney <daniel@pagodabox.com>
 ---------------------------------------------------------------------
 
-local http = require('http')
-local core = require('core')
-local Stream = require('stream')
+local http = require('modules/http')
+local core = require('modules/core')
+local Stream = require('modules/stream')
 local Json = require('./lib/json')
 local Resource = require('./lib/resource')
 local Reply = require('./lib/reply')
