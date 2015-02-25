@@ -9,9 +9,9 @@
 -- Created :   3 Sept 2014 by Daniel Barney <daniel@pagodabox.com>
 ---------------------------------------------------------------------
 
-local http = require('modules/http')
-local core = require('modules/core')
-local Stream = require('modules/stream')
+local http = require('http')
+local core = require('core')
+local Stream = require('stream')
 local Json = require('./lib/json')
 local Resource = require('./lib/resource')
 local Reply = require('./lib/reply')
@@ -22,8 +22,14 @@ local Lever = core.Object:extend()
 function Lever:initialize(ip,port)
     self.resources = {map = {}}
     self.server = http.createServer(function (req, res)
+        -- don't use the qs as part of the lookup
+        local location = string.find(req.url,"?")
+        local url = req.url
+        if location then
+           url = string.sub(req.url,0,location - 1)
+        end
         -- lookup what stream to read from, then read from it
-        local resource,env = self:lookup(req.url,req.method:upper())
+        local resource,env = self:lookup(url,req.method:upper())
         if resource then
             req.env = env
             resource:handle(req,res)
