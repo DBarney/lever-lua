@@ -17,6 +17,6 @@ return
 		,"luvit/core@0.1.0"
 		,"luvit/require@0.1.0"}
 	,files = 
-		{"*.lua"
+		{"**.lua"
 		,"!test*"}
 }
